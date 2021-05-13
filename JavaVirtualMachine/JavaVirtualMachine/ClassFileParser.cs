@@ -62,6 +62,8 @@ namespace JavaVirtualMachine
 
         public ParsedClassFile Parse()
         {
+            Console.WriteLine(BitConverter.ToUInt32(new ArraySegment<byte>(content, 0, 4).Array));
+            Console.WriteLine(Magic);
             if ((uint)(content[0] << 24) + (uint)(content[1] << 16) + (ushort)(content[2] << 8) + content[3] != Magic)
                 throw new Exception(); // Ошибочку нужно создать
             
@@ -209,7 +211,7 @@ namespace JavaVirtualMachine
             int index;
             for (index = 0; index < fragment.Length || _poolCount - Pool.Count > 0; index++) 
             {
-                switch ((Tags) fragment[index]) // везде нужно будет делать соответствующий сдвиг и уменьшать poolCount про добавлении
+                switch ((Tags) fragment[index])
                 { // Здесь всем методам будем передавать index + 1
                     case Tags.CONSTANT_Class:
                         // parse 2byte name_index

@@ -1,0 +1,13 @@
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.exe
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.deps.json
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.runtimeconfig.json
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.runtimeconfig.dev.json
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.dll
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\bin\Debug\netcoreapp3.1\JavaVirtualMachine.pdb
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.csprojAssemblyReference.cache
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.csproj.CoreCompileInputs.cache
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.AssemblyInfoInputs.cache
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.AssemblyInfo.cs
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.dll
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.pdb
+G:\МАТМЕХ\My JVM implementation\JavaVirtualMachine\JavaVirtualMachine\obj\Debug\netcoreapp3.1\JavaVirtualMachine.genruntimeconfig.cache
