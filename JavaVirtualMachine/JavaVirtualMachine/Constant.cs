@@ -1,8 +1,8 @@
 ﻿namespace JavaVirtualMachine
 {
-    public interface IInfoObject { }
+    public interface IConstant { }
 
-    public class Record<T> : IInfoObject
+    public class Record<T> : IConstant
     {
         public T Instance { get; }
         
@@ -12,7 +12,7 @@
         }
     }
 
-    public class Reference : IInfoObject
+    public class Reference : IConstant
     {
         public ushort Instance { get; }
 

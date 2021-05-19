@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 using System.IO;
@@ -17,10 +18,11 @@ namespace JavaVirtualMachine
     public class ClassFileParser
     {
         private byte[] content;
+        private BinaryReader _bReader;
         private int constantPoolByteCount;
         private const uint Magic = 0xCAFEBABE;
         private ushort _minorVersion, _majorVersion, _constantPoolCount;
-        private List<IInfoObject> _constantPool;
+        private List<IConstant> _constantPool;
         private ushort _accessFlags, _thisClass,_superClass, _interfacesCount;
         private List<ushort> _interfaces;
         private ushort _fieldsCount, _methodsCount, _attributesCount;
@@ -28,11 +30,13 @@ namespace JavaVirtualMachine
         public ClassFileParser(string fileName)
         {
             content = ReadClassFile(fileName);
+            //_bReader = ReadClassFile(fileName);
             constantPoolByteCount = 0;
         }
 
         private byte[] ReadClassFile(string fileName)
         {
+            //return new BinaryReader(File.Open(fileName, FileMode.Open));
             byte[] bytes = null;
             try
             {
@@ -43,10 +47,10 @@ namespace JavaVirtualMachine
                 while (numBytesToRead > 0)
                 {
                     var n = fStream.Read(bytes, numBytesRead, numBytesToRead);
-
+            
                     if (n == 0)
                         break;
-
+            
                     numBytesRead += n;
                     numBytesToRead -= n;
                 }
@@ -56,22 +60,23 @@ namespace JavaVirtualMachine
                 Console.WriteLine($"Не удалось найти класс {fileName}");
                 Environment.Exit(7);
             }
-
+            
             return bytes;
         }
 
+        private uint GetUIntFromBytes(byte b0, byte b1, byte b2, byte b3)
+            => (uint) (b0 << 24) + (uint) (b1 << 16) + (ushort) (b2 << 8) + b3;
+
         public ParsedClassFile Parse()
         {
-            Console.WriteLine(BitConverter.ToUInt32(new ArraySegment<byte>(content, 0, 4).Array));
-            Console.WriteLine(Magic);
-            if ((uint)(content[0] << 24) + (uint)(content[1] << 16) + (ushort)(content[2] << 8) + content[3] != Magic)
+            if (GetUIntFromBytes(content[0], content[1], content[2], content[3]) != Magic)
                 throw new Exception(); // Ошибочку нужно создать
             
             ParseVersions();
             ParseConstantPool();
             var afterConstantPoolIndex = 10 + constantPoolByteCount;
             ParseFlagsAndThisAndSuper(afterConstantPoolIndex);
-            _interfacesCount = ParseTwoByteValue(afterConstantPoolIndex + 6);
+            _interfacesCount = GetUShortFromBytes(afterConstantPoolIndex + 6);
             _interfaces = GetInterfaces(_interfacesCount, afterConstantPoolIndex + 8);
 
             return new ParsedClassFile(_minorVersion, _majorVersion, _constantPoolCount, _constantPool);
@@ -80,21 +85,21 @@ namespace JavaVirtualMachine
 
         private void ParseVersions()
         {
-            _minorVersion = ParseTwoByteValue(4);
-            _majorVersion = ParseTwoByteValue(6);
+            _minorVersion = GetUShortFromBytes(4);
+            _majorVersion = GetUShortFromBytes(6);
         }
 
         private void ParseConstantPool()
         {
-            _constantPoolCount = ParseTwoByteValue(8);
+            _constantPoolCount = GetUShortFromBytes(8);
             _constantPool = GetConstantPool(_constantPoolCount);   
         }
 
         private void ParseFlagsAndThisAndSuper(int startIndex)
         {
-            _accessFlags = ParseTwoByteValue(startIndex);
-            _thisClass = ParseTwoByteValue(startIndex + 2);
-            _superClass = ParseTwoByteValue(startIndex + 4);
+            _accessFlags = GetUShortFromBytes(startIndex);
+            _thisClass = GetUShortFromBytes(startIndex + 2);
+            _superClass = GetUShortFromBytes(startIndex + 4);
         } 
         
         private List<ushort> GetInterfaces(ushort count, int startIndex)
@@ -106,7 +111,7 @@ namespace JavaVirtualMachine
             return parser.Pool;
         }
 
-        private List<IInfoObject> GetConstantPool(ushort count)
+        private List<IConstant> GetConstantPool(ushort count)
         {
             var parser = new ConstantPoolParser(count);
             var fragment = new ArraySegment<byte>(content, 10, content.Length - 11).Array;
@@ -115,20 +120,21 @@ namespace JavaVirtualMachine
             return parser.Pool;
         }
 
-        private ushort ParseTwoByteValue(int start) 
-            => (ushort) (content[start] << 8 + content[start + 1]);
+        private ushort GetUShortFromBytes(int start) 
+            =>  (ushort) ((ushort) (content[start] << 8) + content[start + 1]);
     }
 
-    public class ConstantPoolParser : IPoolParser<IInfoObject>
+    public class ConstantPoolParser : IPoolParser<IConstant>
     {
         private readonly ushort _poolCount;
-        public List<IInfoObject> Pool { get; }
+        public List<IConstant> Pool { get; }
         
 
         public ConstantPoolParser(ushort count)
         {
+            
             _poolCount = count;
-            Pool = new List<IInfoObject>(_poolCount);
+            Pool = new List<IConstant>(_poolCount);
         }
         
         [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -152,7 +158,7 @@ namespace JavaVirtualMachine
 
         private static Record<string> ParseUtfStrings(IReadOnlyList<byte> fragment, int index, int length)
         {
-            index += 2;
+            // index += 2;
             var builder = new StringBuilder();
             for (var i = index; i < index + length;) // Тут нужно бросать ошибки при встрече непонятных байтов
             {
@@ -193,7 +199,7 @@ namespace JavaVirtualMachine
         }
 
         private Reference ParseReference(byte[] fragment, int index)
-            => new Reference((ushort) (fragment[index] << 8 + fragment[index + 1]));
+            => new Reference((ushort) ((ushort) (fragment[index] << 8) + fragment[index + 1]));
 
         private Record<int> ParseIntegerConstant(byte[] fragment, int index) // Точно ли правильно парсится?
             => new Record<int>(fragment[index] << 24 + fragment[index + 1] << 16 +
@@ -209,7 +215,7 @@ namespace JavaVirtualMachine
         public int Parse(byte[] fragment)
         {
             int index;
-            for (index = 0; index < fragment.Length || _poolCount - Pool.Count > 0; index++) 
+            for (index = 0; index < fragment.Length && _poolCount - Pool.Count > 0; index++) 
             {
                 switch ((Tags) fragment[index])
                 { // Здесь всем методам будем передавать index + 1

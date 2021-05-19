@@ -2,7 +2,7 @@
 
 namespace JavaVirtualMachine
 {
-    public readonly struct ParsedClassFile // Быть может, тут стоит собирать лонги и даблы
+    public readonly struct ParsedClassFile
     {
         // Long:
         // ((long) high_bytes << 32) + low_bytes
@@ -18,10 +18,11 @@ namespace JavaVirtualMachine
         public ushort MinorVersion { get; }
         public ushort MajorVersion { get; }
         public ushort ConstantPoolCount { get; }
-        public List<IInfoObject> ConstantPoolTable { get; } // indexed from 1 to constantPoolCount - 1
+        
+        public List<IConstant> ConstantPoolTable { get; } // indexed from 1 to constantPoolCount - 1
 
         public ParsedClassFile(ushort minorVersion, ushort majorVersion, ushort constantPoolCount,
-            List<IInfoObject> constantPoolTable)
+            List<IConstant> constantPoolTable)
         {
             MinorVersion = minorVersion;
             MajorVersion = majorVersion;
