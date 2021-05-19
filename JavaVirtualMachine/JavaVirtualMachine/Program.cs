@@ -11,7 +11,7 @@ namespace JavaVirtualMachine
             Console.WriteLine(res.MinorVersion);
             Console.WriteLine(res.MajorVersion);
             Console.WriteLine(res.ConstantPoolCount);
-            Console.WriteLine(res.ConstantPoolTable);
+            Console.WriteLine(string.Join(" ", res.ConstantPoolTable));
         }
     }
 }

@@ -5,20 +5,20 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace JavaVirtualMachine
 {
     public interface IPoolParser<T>
     {
-        int Parse(byte[] fragment);
-        List<T> Pool { get; }
+        List<T> Parse(MyBinaryReader binaryReader);
     }
     
     public class ClassFileParser
     {
-        private byte[] content;
-        private BinaryReader _bReader;
+        //private byte[] content;
+        private MyBinaryReader _bReader;
         private int constantPoolByteCount;
         private const uint Magic = 0xCAFEBABE;
         private ushort _minorVersion, _majorVersion, _constantPoolCount;
@@ -29,39 +29,39 @@ namespace JavaVirtualMachine
 
         public ClassFileParser(string fileName)
         {
-            content = ReadClassFile(fileName);
-            //_bReader = ReadClassFile(fileName);
+            //content = ReadClassFile(fileName);
+            _bReader = ReadClassFile(fileName);
             constantPoolByteCount = 0;
         }
 
-        private byte[] ReadClassFile(string fileName)
+        private MyBinaryReader ReadClassFile(string fileName)
         {
-            //return new BinaryReader(File.Open(fileName, FileMode.Open));
-            byte[] bytes = null;
-            try
-            {
-                using var fStream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-                bytes = new byte[fStream.Length];
-                var numBytesToRead = (int) fStream.Length;
-                var numBytesRead = 0;
-                while (numBytesToRead > 0)
-                {
-                    var n = fStream.Read(bytes, numBytesRead, numBytesToRead);
-            
-                    if (n == 0)
-                        break;
-            
-                    numBytesRead += n;
-                    numBytesToRead -= n;
-                }
-            }
-            catch ( FileNotFoundException )
-            {
-                Console.WriteLine($"Не удалось найти класс {fileName}");
-                Environment.Exit(7);
-            }
-            
-            return bytes;
+            return new MyBinaryReader(File.Open(fileName, FileMode.Open));
+            // byte[] bytes = null;
+            // try
+            // {
+            //     using var fStream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            //     bytes = new byte[fStream.Length];
+            //     var numBytesToRead = (int) fStream.Length;
+            //     var numBytesRead = 0;
+            //     while (numBytesToRead > 0)
+            //     {
+            //         var n = fStream.Read(bytes, numBytesRead, numBytesToRead);
+            //
+            //         if (n == 0)
+            //             break;
+            //
+            //         numBytesRead += n;
+            //         numBytesToRead -= n;
+            //     }
+            // }
+            // catch ( FileNotFoundException )
+            // {
+            //     Console.WriteLine($"Не удалось найти класс {fileName}");
+            //     Environment.Exit(7);
+            // }
+            //
+            // return bytes;
         }
 
         private uint GetUIntFromBytes(byte b0, byte b1, byte b2, byte b3)
@@ -69,72 +69,50 @@ namespace JavaVirtualMachine
 
         public ParsedClassFile Parse()
         {
-            if (GetUIntFromBytes(content[0], content[1], content[2], content[3]) != Magic)
-                throw new Exception(); // Ошибочку нужно создать
+            if (_bReader.ReadUInt32() != Magic)
+                throw new Exception("MagicException"); // Ошибочку нужно создать
             
-            ParseVersions();
-            ParseConstantPool();
-            var afterConstantPoolIndex = 10 + constantPoolByteCount;
-            ParseFlagsAndThisAndSuper(afterConstantPoolIndex);
-            _interfacesCount = GetUShortFromBytes(afterConstantPoolIndex + 6);
-            _interfaces = GetInterfaces(_interfacesCount, afterConstantPoolIndex + 8);
+            var minorVersion = _bReader.ReadUInt16();
+            var majorVersion = _bReader.ReadUInt16();
+            
+            var constantPoolCount = _bReader.ReadUInt16();
+            var constantPool = GetConstantPool(constantPoolCount);
+            
+            var acessFlags = _bReader.ReadUInt16();
+            var thisClass = _bReader.ReadUInt16();
+            var superClass = _bReader.ReadUInt16();
+            var interfacesCount = _bReader.ReadUInt16();
+            var interfaces = GetInterfaces(_interfacesCount);
 
-            return new ParsedClassFile(_minorVersion, _majorVersion, _constantPoolCount, _constantPool);
+            return new ParsedClassFile(minorVersion, majorVersion, constantPoolCount, constantPool);
         }
-
-
-        private void ParseVersions()
-        {
-            _minorVersion = GetUShortFromBytes(4);
-            _majorVersion = GetUShortFromBytes(6);
-        }
-
-        private void ParseConstantPool()
-        {
-            _constantPoolCount = GetUShortFromBytes(8);
-            _constantPool = GetConstantPool(_constantPoolCount);   
-        }
-
-        private void ParseFlagsAndThisAndSuper(int startIndex)
-        {
-            _accessFlags = GetUShortFromBytes(startIndex);
-            _thisClass = GetUShortFromBytes(startIndex + 2);
-            _superClass = GetUShortFromBytes(startIndex + 4);
-        } 
         
-        private List<ushort> GetInterfaces(ushort count, int startIndex)
+        
+        private List<ushort> GetInterfaces(ushort count)
         {
             var parser = new InterfacesParser(count);
-            var fragment = new ArraySegment<byte>(content, startIndex, count * 2).Array;
-            parser.Parse(fragment);
-
-            return parser.Pool;
+            
+            return parser.Parse(_bReader);
         }
 
         private List<IConstant> GetConstantPool(ushort count)
         {
             var parser = new ConstantPoolParser(count);
-            var fragment = new ArraySegment<byte>(content, 10, content.Length - 11).Array;
-            constantPoolByteCount = parser.Parse(fragment);
             
-            return parser.Pool;
+            return  parser.Parse(_bReader);
         }
 
-        private ushort GetUShortFromBytes(int start) 
-            =>  (ushort) ((ushort) (content[start] << 8) + content[start + 1]);
+        // private ushort GetU2Value(byte b1, byte b2) 
+        //     => 
     }
 
     public class ConstantPoolParser : IPoolParser<IConstant>
     {
         private readonly ushort _poolCount;
-        public List<IConstant> Pool { get; }
         
-
         public ConstantPoolParser(ushort count)
         {
-            
             _poolCount = count;
-            Pool = new List<IConstant>(_poolCount);
         }
         
         [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -156,11 +134,10 @@ namespace JavaVirtualMachine
             CONSTANT_InvokeDynamic = 18
         }
 
-        private static Record<string> ParseUtfStrings(IReadOnlyList<byte> fragment, int index, int length)
+        private static Record<string> ParseUtfStrings(IReadOnlyList<byte> fragment, int length)
         {
-            // index += 2;
             var builder = new StringBuilder();
-            for (var i = index; i < index + length;) // Тут нужно бросать ошибки при встрече непонятных байтов
+            for (var i = 0; i < length; ) // Тут нужно бросать ошибки при встрече непонятных байтов
             {
                 var codePoint = (char) fragment[i];
                 if (codePoint >= '\u0001' && codePoint <= '\u007F')
@@ -198,125 +175,149 @@ namespace JavaVirtualMachine
             return new Record<string>(builder.ToString());
         }
 
-        private Reference ParseReference(byte[] fragment, int index)
-            => new Reference((ushort) ((ushort) (fragment[index] << 8) + fragment[index + 1]));
+        protected Reference ParseReference(BinaryReader reader)  // Это неверно
+            => new Reference(reader.ReadUInt16());
 
-        private Record<int> ParseIntegerConstant(byte[] fragment, int index) // Точно ли правильно парсится?
-            => new Record<int>(fragment[index] << 24 + fragment[index + 1] << 16 +
-                fragment[index + 2] << 8 + fragment[index + 3]);
+        private Record<int> ParseIntegerConstant(MyBinaryReader reader)
+            => new Record<int>(reader.ReadInt32());
 
-        private Record<float> ParseFloatConstant(byte[] fragment, int index) // Точно ли правильно парсится?
-            => new Record<float>(fragment[index] << 24 + fragment[index + 1] << 16 +
-                fragment[index + 2] << 8 + fragment[index + 3]);
+        private Record<float> ParseFloatConstant(MyBinaryReader reader)
+            => new Record<float>(reader.ReadSingle());
 
-        private Tuple<Record<int>, Record<int>> ParseLongOrDoubleConstant(byte[] fragment, int index)
-            => Tuple.Create(ParseIntegerConstant(fragment, index), ParseIntegerConstant(fragment, index + 4));
+        private Tuple<Record<int>, Record<int>> ParseLongOrDoubleConstant(MyBinaryReader reader)
+            => Tuple.Create(ParseIntegerConstant(reader), ParseIntegerConstant(reader));
 
-        public int Parse(byte[] fragment)
+        private Record<long> ParseLongConstant(MyBinaryReader reader)
         {
-            int index;
-            for (index = 0; index < fragment.Length && _poolCount - Pool.Count > 0; index++) 
+            // var highBytes = reader.ReadInt32();
+            // var lowBytes = reader.ReadInt32();
+            return new Record<long>(reader.ReadInt64());
+        }
+
+        private Record<double> ParseDoubleConstant(MyBinaryReader reader)
+        {
+            // var bits = reader.ReadInt64();
+            // var s = bits >> 63 == 0 ? 1 : -1;
+            // var e = (int)((bits >> 52) & 0x7ffL);
+            // var m = e == 0 ? (bits & 0xfffffffffffffL) << 1 : (bits & 0xfffffffffffffL) | 0x10000000000000L;
+            //
+            return new Record<double>(reader.ReadDouble());
+        }
+        
+        public List<IConstant> Parse(MyBinaryReader reader)
+        {
+            var pool = new List<IConstant>(_poolCount);
+            //int index;
+            //for (index = 0; index < fragment.Length && _poolCount - Pool.Count > 0; index++) 
+            while (_poolCount - pool.Count > 0)
             {
-                switch ((Tags) fragment[index])
+                switch ((Tags) reader.ReadByte())
                 { // Здесь всем методам будем передавать index + 1
                     case Tags.CONSTANT_Class:
                         // parse 2byte name_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_Fieldref:
                     case Tags.CONSTANT_Methodref:
                     case Tags.CONSTANT_InterfaceMethodref:
                         // u2 class_index
                         // u2 name_and_type_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_String:
                         // u2 string_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_Integer:
                         // u4 bytes
-                        Pool.Add(ParseIntegerConstant(fragment, index + 1));
-                        index += 4;
+                        pool.Add(ParseIntegerConstant(reader));
+                        //index += 4;
                         break;
                     case Tags.CONSTANT_Float: // Не знаю, что будет с float, попробую не пользоваться формулой s * m * 2**(e-150)
                         // u4 bytes
-                        Pool.Add(ParseFloatConstant(fragment, index + 1));
-                        index += 4;
+                        pool.Add(ParseFloatConstant(reader));
+                        //index += 4;
                         break;
                     case Tags.CONSTANT_Long:
                     case Tags.CONSTANT_Double:
-                        var pair = ParseLongOrDoubleConstant(fragment, index + 1);
-                        Pool.Add(pair.Item1);
-                        Pool.Add(pair.Item2);
-                        index += 8;
+                        var pair = ParseLongOrDoubleConstant(reader);
+                        pool.Add(pair.Item1);
+                        pool.Add(pair.Item2);
+                        //index += 8;
                         break;
                     case Tags.CONSTANT_NameAndType:
                         // u2 name_index
                         // u2 descriptor_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_Utf8:
-                        var length = (ushort) (fragment[index + 1] << 8 + fragment[index + 2]); // u2 length
+                        var length = reader.ReadUInt16(); // u2 length
                         // Здесь получим строку для записи в пул констант
-                        Pool.Add(ParseUtfStrings(fragment, index + 3, length)); 
+                        var fragment = reader.ReadBytes(length);
+                        pool.Add(ParseUtfStrings(fragment, length)); 
                         // Прочитали длину и саму строку
-                        index += 2 + length;
+                        //index += 2 + length;
                         break;
                     case Tags.CONSTANT_MethodHandle:
                         // u1 reference_kind in range(1 to 9) 
                         // u2 reference_index
-                        Pool.Add(new Record<byte>(fragment[index + 1])); // Надо бы валидацию
-                        index++;
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(new Record<byte>(reader.ReadByte())); // Надо бы валидацию
+                        //index++;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_MethodType:
                         // u2 descriptor_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                     case Tags.CONSTANT_InvokeDynamic:
                         // u2 bootstrap_method_attr_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         // u2 name_and_type_index
-                        Pool.Add(ParseReference(fragment, index + 1));
-                        index += 2;
+                        pool.Add(ParseReference(reader));
+                        //index += 2;
                         break;
                 }
             }
 
-            return index;
+            return pool;
         }
     }
 
     public class InterfacesParser : IPoolParser<ushort>
     {
-        public List<ushort> Pool { get; }
+        private ushort interfacesCount;
 
         public InterfacesParser(ushort poolCount)
         {
-            Pool = new List<ushort>(poolCount);
+            interfacesCount = poolCount;
         }
         
-        public int Parse(byte[] fragment)
+        public List<ushort> Parse(MyBinaryReader reader)
         {
-            int index;
-            for (index = 0; index < fragment.Length - 1; index += 2) 
-                Pool.Add((ushort) (fragment[index] << 8 + fragment[index + 1]));
-
-            if (index != fragment.Length / 2) throw new Exception("Ошибка с интерфейсами");
+            var pool = new List<ushort>(interfacesCount);
+            // int index;
+            // for (index = 0; index < fragment.Length - 1; index += 2) 
+            //     Pool.Add((ushort) (fragment[index] << 8 + fragment[index + 1]));
+            //
+            // if (index != fragment.Length / 2) throw new Exception("Ошибка с интерфейсами");
             
-            return index;
+            // return index;
+
+            for (var _ = 0; _ < interfacesCount; _++)
+                pool.Add(reader.ReadUInt16());
+
+            return pool;
         }
 
     }
