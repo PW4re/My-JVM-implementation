@@ -29,40 +29,12 @@ namespace JavaVirtualMachine
 
         public ClassFileParser(string fileName)
         {
-            //content = ReadClassFile(fileName);
             _bReader = ReadClassFile(fileName);
             constantPoolByteCount = 0;
         }
 
-        private MyBinaryReader ReadClassFile(string fileName)
-        {
-            return new MyBinaryReader(File.Open(fileName, FileMode.Open));
-            // byte[] bytes = null;
-            // try
-            // {
-            //     using var fStream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-            //     bytes = new byte[fStream.Length];
-            //     var numBytesToRead = (int) fStream.Length;
-            //     var numBytesRead = 0;
-            //     while (numBytesToRead > 0)
-            //     {
-            //         var n = fStream.Read(bytes, numBytesRead, numBytesToRead);
-            //
-            //         if (n == 0)
-            //             break;
-            //
-            //         numBytesRead += n;
-            //         numBytesToRead -= n;
-            //     }
-            // }
-            // catch ( FileNotFoundException )
-            // {
-            //     Console.WriteLine($"Не удалось найти класс {fileName}");
-            //     Environment.Exit(7);
-            // }
-            //
-            // return bytes;
-        }
+        private MyBinaryReader ReadClassFile(string fileName) 
+            => new MyBinaryReader(File.Open(fileName, FileMode.Open));
 
         private uint GetUIntFromBytes(byte b0, byte b1, byte b2, byte b3)
             => (uint) (b0 << 24) + (uint) (b1 << 16) + (ushort) (b2 << 8) + b3;
@@ -165,18 +137,15 @@ namespace JavaVirtualMachine
                     continue;
                 }
 
-                codePoint = (char) (0x10000 + ((fragment[i + 1] & 0x0f) << 16) +
-                                    ((fragment[i + 2] & 0x3f) << 10) +
-                                    ((fragment[i + 4] & 0x0f) << 6) + (fragment[i + 5] & 0x3f));
+                codePoint = (char) (0x10000 + ((fragment[i] & 0x0f) << 16) +
+                                    ((fragment[i + 1] & 0x3f) << 10) +
+                                    ((fragment[i + 2] & 0x0f) << 6) + (fragment[i + 3] & 0x3f));
                 builder.Append(codePoint);
                 i += 6;
             } // u1 bytes[length]
 
             return new Record<string>(builder.ToString());
         }
-
-        protected Reference ParseReference(BinaryReader reader)  // Это неверно
-            => new Reference(reader.ReadUInt16());
 
         private Record<int> ParseIntegerConstant(MyBinaryReader reader)
             => new Record<int>(reader.ReadInt32());
@@ -200,38 +169,32 @@ namespace JavaVirtualMachine
             // var s = bits >> 63 == 0 ? 1 : -1;
             // var e = (int)((bits >> 52) & 0x7ffL);
             // var m = e == 0 ? (bits & 0xfffffffffffffL) << 1 : (bits & 0xfffffffffffffL) | 0x10000000000000L;
-            //
+            
             return new Record<double>(reader.ReadDouble());
         }
         
         public List<IConstant> Parse(MyBinaryReader reader)
         {
             var pool = new List<IConstant>(_poolCount);
-            //int index;
-            //for (index = 0; index < fragment.Length && _poolCount - Pool.Count > 0; index++) 
+            pool.Add(null); // заполняем первый индекс заглушкой, т.к. здесб нумерация с единицы
             while (_poolCount - pool.Count > 0)
             {
                 switch ((Tags) reader.ReadByte())
                 { // Здесь всем методам будем передавать index + 1
                     case Tags.CONSTANT_Class:
                         // parse 2byte name_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new ClassInfo(reader.ReadUInt16()));
                         break;
                     case Tags.CONSTANT_Fieldref:
                     case Tags.CONSTANT_Methodref:
                     case Tags.CONSTANT_InterfaceMethodref:
                         // u2 class_index
                         // u2 name_and_type_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new FiMeInRef(reader.ReadUInt16(), reader.ReadUInt16()));
                         break;
                     case Tags.CONSTANT_String:
                         // u2 string_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new StringRef(reader.ReadUInt16()));
                         break;
                     case Tags.CONSTANT_Integer:
                         // u4 bytes
@@ -253,39 +216,27 @@ namespace JavaVirtualMachine
                     case Tags.CONSTANT_NameAndType:
                         // u2 name_index
                         // u2 descriptor_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new NameAndTypeInfo(reader.ReadUInt16(), reader.ReadUInt16()));
                         break;
                     case Tags.CONSTANT_Utf8:
                         var length = reader.ReadUInt16(); // u2 length
                         // Здесь получим строку для записи в пул констант
                         var fragment = reader.ReadBytes(length);
-                        pool.Add(ParseUtfStrings(fragment, length)); 
-                        // Прочитали длину и саму строку
-                        //index += 2 + length;
+                        pool.Add(ParseUtfStrings(fragment, length));
                         break;
                     case Tags.CONSTANT_MethodHandle:
                         // u1 reference_kind in range(1 to 9) 
                         // u2 reference_index
-                        pool.Add(new Record<byte>(reader.ReadByte())); // Надо бы валидацию
-                        //index++;
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new MethodHandle(reader.ReadByte(), reader.ReadUInt16())); // Надо бы валидацию
                         break;
                     case Tags.CONSTANT_MethodType:
                         // u2 descriptor_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new MethodType(reader.ReadUInt16()));
                         break;
                     case Tags.CONSTANT_InvokeDynamic:
                         // u2 bootstrap_method_attr_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
                         // u2 name_and_type_index
-                        pool.Add(ParseReference(reader));
-                        //index += 2;
+                        pool.Add(new InvokeDynamic(reader.ReadUInt16(), reader.ReadUInt16()));
                         break;
                 }
             }
