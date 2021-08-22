@@ -1,4 +1,4 @@
-﻿namespace JavaVirtualMachine
+﻿namespace JavaVirtualMachine.JVMObjects
 {
     public interface IConstant { }
 
@@ -96,4 +96,5 @@
             StringIndex = stringIndex;
         }
     }
+
 }
